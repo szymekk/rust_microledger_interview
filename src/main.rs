@@ -22,6 +22,7 @@ struct Message {
 enum ResponseCode {
     InternalServerError,
     BadRequest,
+    Unauthorized,
 }
 
 fn generate_token() -> Token {
@@ -50,6 +51,23 @@ fn save_token_to_file(token: &str) -> Result<(), std::io::Error> {
     })
 }
 
+async fn authorize(token: Token) -> Result<(), ResponseCode> {
+    let tokens: Option<Vec<Token>> = (|| {
+        let tokens_file = OpenOptions::new().read(true).open("tokens.json").ok()?;
+        let reader = BufReader::new(tokens_file);
+        serde_json::from_reader(reader).ok()
+    })();
+
+    if tokens.is_none() {
+        return Err(ResponseCode::InternalServerError);
+    }
+    let tokens: Vec<Token> = tokens.unwrap();
+    if !tokens.contains(&token) {
+        return Err(ResponseCode::Unauthorized);
+    }
+    Ok(())
+}
+
 async fn handle_message(body: Body) -> Result<(), ResponseCode> {
     let body = hyper::body::to_bytes(body)
         .await
@@ -57,6 +75,9 @@ async fn handle_message(body: Body) -> Result<(), ResponseCode> {
     let event: Event =
         serde_json::from_slice(&body).map_err(|_| ResponseCode::InternalServerError)?;
     println!("{}", event.msg.payload);
+
+    authorize(event.uuid).await?;
+
     Ok(())
 }
 
@@ -83,6 +104,7 @@ async fn handle_connection(req: Request<Body>) -> Result<Response<Body>, hyper::
                     let status_code = match err {
                         ResponseCode::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
                         ResponseCode::BadRequest => StatusCode::BAD_REQUEST,
+                        ResponseCode::Unauthorized => StatusCode::UNAUTHORIZED,
                     };
                     Ok(Response::builder()
                         .status(status_code)
