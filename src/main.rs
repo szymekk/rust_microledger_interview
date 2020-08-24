@@ -1,6 +1,9 @@
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
+use std::fs::OpenOptions;
+use std::io::{BufReader, Seek, SeekFrom, Write};
+
 type Token = String;
 
 fn generate_token() -> Token {
@@ -11,11 +14,36 @@ fn generate_token() -> Token {
     token_string
 }
 
+fn save_token_to_file(token: &str) -> Result<(), std::io::Error> {
+    let file = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open("tokens.json");
+    file.and_then(|mut f| {
+        let reader = BufReader::new(&f);
+        let tokens = serde_json::from_reader(reader);
+        // if 'tokens.json' is empty or contains invalid data return an empty list
+        let mut tokens: Vec<Token> = tokens.unwrap_or_default();
+        tokens.push(token.to_string());
+        // overwrite the previous contents
+        f.seek(SeekFrom::Start(0))?;
+        f.write_all(serde_json::to_string(&tokens).unwrap().as_bytes())
+    })
+}
+
 async fn handle_connection(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/pair") => {
             let token_string = generate_token();
-            let response = Response::new(Body::from(token_string));
+            let write_result = save_token_to_file(&token_string);
+            let response: Response<Body> = match write_result {
+                Ok(_) => Response::new(Body::from(token_string)),
+                Err(_e) => Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::empty())
+                    .unwrap(),
+            };
             Ok(response)
         }
 
