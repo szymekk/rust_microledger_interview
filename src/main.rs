@@ -150,7 +150,6 @@ fn parse_args(args: &mut Args) -> (Option<String>, Option<String>) {
     let mut message = None;
     while let Some(arg) = args.next() {
         match &arg[..] {
-            // "-H" => addr = match args.next()?.parse(),
             "-H" => addr = args.next(),
             "-m" => message = args.next(),
             _ => (),
@@ -167,7 +166,7 @@ async fn pair_with_address(client: &Client<HttpConnector>, address: &str) -> MyR
         .build()?;
     let res = client.get(uri).await?;
     let body = hyper::body::to_bytes(res.into_body()).await?;
-    let token = String::from_utf8(body.to_vec())?; //.map_err(|_| ());
+    let token = String::from_utf8(body.to_vec())?;
     Ok(token)
 }
 
@@ -198,12 +197,10 @@ async fn post_message(
 }
 
 async fn listen() -> MyResult<()> {
-    let addr = ([127, 0, 0, 1], 0).into();
-
+    let address = ([127, 0, 0, 1], 0).into();
     let service =
         make_service_fn(|_| async { Ok::<_, hyper::Error>(service_fn(handle_connection)) });
-
-    let server = Server::bind(&addr).serve(service);
+    let server = Server::bind(&address).serve(service);
 
     println!("Listening on http://{}", server.local_addr());
 
@@ -215,6 +212,8 @@ async fn listen() -> MyResult<()> {
 async fn main() -> MyResult<()> {
     let mut args = std::env::args();
     match parse_args(&mut args) {
+        // if command line arguments were provided send a message to the specified address
+        // otherwise listen for incoming messages
         (Some(ref address), Some(ref message)) => {
             let client = Client::new();
             let token = pair_with_address(&client, address).await?;
