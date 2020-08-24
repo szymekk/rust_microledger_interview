@@ -157,21 +157,26 @@ fn parse_args(args: &mut Args) -> (Option<String>, Option<String>) {
     (addr, message)
 }
 
+async fn listen() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let addr = ([127, 0, 0, 1], 0).into();
+
+    let service =
+        make_service_fn(|_| async { Ok::<_, hyper::Error>(service_fn(handle_connection)) });
+
+    let server = Server::bind(&addr).serve(service);
+
+    println!("Listening on http://{}", server.local_addr());
+
+    server.await?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut args = std::env::args();
     match parse_args(&mut args) {
         (Some(ref addr), Some(ref message)) => println!("{}, {}", message, addr),
-        _ => {
-            let addr = ([127, 0, 0, 1], 0).into();
-            let service =
-                make_service_fn(|_| async { Ok::<_, hyper::Error>(service_fn(handle_connection)) });
-            let server = Server::bind(&addr).serve(service);
-
-            println!("Listening on http://{}", server.local_addr());
-
-            server.await?;
-        }
+        _ => listen().await?,
     };
     Ok(())
 }
