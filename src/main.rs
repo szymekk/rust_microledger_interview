@@ -3,6 +3,7 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
 use serde::{Deserialize, Serialize};
 
+use std::env::Args;
 use std::fs::OpenOptions;
 use std::io::{BufReader, Seek, SeekFrom, Write};
 
@@ -142,15 +143,35 @@ async fn handle_connection(req: Request<Body>) -> Result<Response<Body>, hyper::
     }
 }
 
+fn parse_args(args: &mut Args) -> (Option<String>, Option<String>) {
+    let mut addr = None;
+    let mut message = None;
+    while let Some(arg) = args.next() {
+        match &arg[..] {
+            // "-H" => addr = match args.next()?.parse(),
+            "-H" => addr = args.next(),
+            "-m" => message = args.next(),
+            _ => (),
+        }
+    }
+    (addr, message)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let addr = ([127, 0, 0, 1], 0).into();
-    let service =
-        make_service_fn(|_| async { Ok::<_, hyper::Error>(service_fn(handle_connection)) });
-    let server = Server::bind(&addr).serve(service);
+    let mut args = std::env::args();
+    match parse_args(&mut args) {
+        (Some(ref addr), Some(ref message)) => println!("{}, {}", message, addr),
+        _ => {
+            let addr = ([127, 0, 0, 1], 0).into();
+            let service =
+                make_service_fn(|_| async { Ok::<_, hyper::Error>(service_fn(handle_connection)) });
+            let server = Server::bind(&addr).serve(service);
 
-    println!("Listening on http://{}", server.local_addr());
+            println!("Listening on http://{}", server.local_addr());
 
-    server.await?;
+            server.await?;
+        }
+    };
     Ok(())
 }
