@@ -8,6 +8,7 @@ use std::fs::OpenOptions;
 use std::io::{BufReader, Seek, SeekFrom, Write};
 
 type Token = String;
+type MyResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Event {
@@ -157,7 +158,7 @@ fn parse_args(args: &mut Args) -> (Option<String>, Option<String>) {
     (addr, message)
 }
 
-async fn listen() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn listen() -> MyResult<()> {
     let addr = ([127, 0, 0, 1], 0).into();
 
     let service =
@@ -172,7 +173,7 @@ async fn listen() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> MyResult<()> {
     let mut args = std::env::args();
     match parse_args(&mut args) {
         (Some(ref addr), Some(ref message)) => println!("{}, {}", message, addr),
