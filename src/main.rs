@@ -1,10 +1,28 @@
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
+use serde::{Deserialize, Serialize};
+
 use std::fs::OpenOptions;
 use std::io::{BufReader, Seek, SeekFrom, Write};
 
 type Token = String;
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Event {
+    uuid: String,
+    msg: Message,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Message {
+    payload: String,
+}
+
+enum ResponseCode {
+    InternalServerError,
+    BadRequest,
+}
 
 fn generate_token() -> Token {
     use rand::distributions::Alphanumeric;
@@ -32,6 +50,16 @@ fn save_token_to_file(token: &str) -> Result<(), std::io::Error> {
     })
 }
 
+async fn handle_message(body: Body) -> Result<(), ResponseCode> {
+    let body = hyper::body::to_bytes(body)
+        .await
+        .map_err(|_| ResponseCode::BadRequest)?;
+    let event: Event =
+        serde_json::from_slice(&body).map_err(|_| ResponseCode::InternalServerError)?;
+    println!("{}", event.msg.payload);
+    Ok(())
+}
+
 async fn handle_connection(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/pair") => {
@@ -45,6 +73,23 @@ async fn handle_connection(req: Request<Body>) -> Result<Response<Body>, hyper::
                     .unwrap(),
             };
             Ok(response)
+        }
+
+        (&Method::POST, "/messages") => {
+            let body = req.into_body();
+            match handle_message(body).await {
+                Ok(_) => Ok(Response::default()),
+                Err(err) => {
+                    let status_code = match err {
+                        ResponseCode::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
+                        ResponseCode::BadRequest => StatusCode::BAD_REQUEST,
+                    };
+                    Ok(Response::builder()
+                        .status(status_code)
+                        .body(Body::empty())
+                        .unwrap())
+                }
+            }
         }
 
         // for other routes return 404 Not Found
