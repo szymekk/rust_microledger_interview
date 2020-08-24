@@ -68,6 +68,25 @@ async fn authorize(token: Token) -> Result<(), ResponseCode> {
     Ok(())
 }
 
+fn save_message_to_file(message: Message) -> Result<(), std::io::Error> {
+    let mut messages_file = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open("messages.json")?;
+    let messages_reader = BufReader::new(&messages_file);
+    let messages = serde_json::from_reader(messages_reader);
+    // if 'messages.json' is empty or contains invalid data return an empty list
+    let mut messages: Vec<Message> = messages.unwrap_or_default();
+    messages.push(message);
+    // overwrite the previous contents
+    messages_file.seek(SeekFrom::Start(0))?;
+    let messages_string = serde_json::to_string(&messages).unwrap();
+    let serialized_messages = messages_string.as_bytes();
+    messages_file.write_all(serialized_messages)?;
+    Ok(())
+}
+
 async fn handle_message(body: Body) -> Result<(), ResponseCode> {
     let body = hyper::body::to_bytes(body)
         .await
@@ -78,6 +97,7 @@ async fn handle_message(body: Body) -> Result<(), ResponseCode> {
 
     authorize(event.uuid).await?;
 
+    save_message_to_file(event.msg).map_err(|_| ResponseCode::InternalServerError)?;
     Ok(())
 }
 
