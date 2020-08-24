@@ -1,5 +1,6 @@
+use hyper::client::connect::HttpConnector;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use hyper::{Body, Client, Method, Request, Response, Server, StatusCode, Uri};
 
 use serde::{Deserialize, Serialize};
 
@@ -158,6 +159,18 @@ fn parse_args(args: &mut Args) -> (Option<String>, Option<String>) {
     (addr, message)
 }
 
+async fn pair_with_address(client: &Client<HttpConnector>, address: &str) -> MyResult<String> {
+    let uri = Uri::builder()
+        .scheme("http")
+        .authority(address)
+        .path_and_query("/pair")
+        .build()?;
+    let res = client.get(uri).await?;
+    let body = hyper::body::to_bytes(res.into_body()).await?;
+    let token = String::from_utf8(body.to_vec())?; //.map_err(|_| ());
+    Ok(token)
+}
+
 async fn listen() -> MyResult<()> {
     let addr = ([127, 0, 0, 1], 0).into();
 
@@ -176,7 +189,12 @@ async fn listen() -> MyResult<()> {
 async fn main() -> MyResult<()> {
     let mut args = std::env::args();
     match parse_args(&mut args) {
-        (Some(ref addr), Some(ref message)) => println!("{}, {}", message, addr),
+        (Some(ref addr), Some(ref message)) => {
+            println!("{}, {}", message, addr);
+            let client = Client::new();
+            let token = pair_with_address(&client, addr).await?;
+            println!("received token: {:?}", token);
+        }
         _ => listen().await?,
     };
     Ok(())
