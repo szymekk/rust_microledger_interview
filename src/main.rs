@@ -171,6 +171,32 @@ async fn pair_with_address(client: &Client<HttpConnector>, address: &str) -> MyR
     Ok(token)
 }
 
+async fn post_message(
+    client: &Client<HttpConnector>,
+    message: &str,
+    address: &str,
+    token: &str,
+) -> MyResult<()> {
+    let uri = Uri::builder()
+        .scheme("http")
+        .authority(address)
+        .path_and_query("/messages")
+        .build()?;
+    let event = Event {
+        uuid: token.to_string(),
+        msg: Message {
+            payload: message.to_string(),
+        },
+    };
+    let serialized = serde_json::to_string(&event)?;
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri(uri)
+        .body(Body::from(serialized))?;
+    client.request(request).await?;
+    Ok(())
+}
+
 async fn listen() -> MyResult<()> {
     let addr = ([127, 0, 0, 1], 0).into();
 
@@ -189,11 +215,10 @@ async fn listen() -> MyResult<()> {
 async fn main() -> MyResult<()> {
     let mut args = std::env::args();
     match parse_args(&mut args) {
-        (Some(ref addr), Some(ref message)) => {
-            println!("{}, {}", message, addr);
+        (Some(ref address), Some(ref message)) => {
             let client = Client::new();
-            let token = pair_with_address(&client, addr).await?;
-            println!("received token: {:?}", token);
+            let token = pair_with_address(&client, address).await?;
+            post_message(&client, message, address, &token).await?;
         }
         _ => listen().await?,
     };
